@@ -3,7 +3,7 @@ Library for controlling a HiWonder xArm robot arm using the `LewanSoul Bus Servo
 <https://www.dropbox.com/sh/6pvnbjkwey2yr93/AACxdx1YI7Ps-4-y3zM9UBV7a?dl=0&preview=LewanSoul+Bus+Servo+Communication+Protocol.pdf>`_.
 
 This code assumes that the computer running this code is connected to an Arduino-compatible microcontroller
-running the code in ``xarm_control.ino``, which acts as a serial to half-duplex UART converter.
+running the code in ``xarm.ino``, which acts as a serial to half-duplex UART converter.
 """
 
 import struct
@@ -874,4 +874,3 @@ if __name__ == '__main__':
     import sys
 
     sys.exit(main())
-
