@@ -2,6 +2,10 @@
 Control a [Hiwonder xArm robot arm](https://www.hiwonder.hk/products/xarm-hiwonder-6dof-bus-servo-robotic-arm-based-on-scratch-arduino-programmable-robotic-arm)
 using Python 3.
 
+This library supports all the commands necessary to control the arm position, as well as commands to set parameters and
+read servo states such as position, temperature, and supply voltage.  It is a full implementation of the
+[LewanSoul Bus Servo Communication Protocol](https://www.dropbox.com/sh/6pvnbjkwey2yr93/AACxdx1YI7Ps-4-y3zM9UBV7a?dl=0&preview=LewanSoul+Bus+Servo+Communication+Protocol.pdf>).
+
 
 ## Hardware
 In addition to a Hiwonder xArm, you will need an Arduino-compatible microcontroller with a USB serial interface,
