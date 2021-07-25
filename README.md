@@ -1,5 +1,5 @@
 # hiwonder-xarm-python3
-Control a [Hiwonder xArm robot arm](https://www.hiwonder.hk/products/xarm-hiwonder-6dof-bus-servo-robotic-arm-based-on-scratch-arduino-programmable-robotic-arm)
+Control a [Hiwonder xArm robot arm](https://www.hiwonder.hk/products/xarm-hiwonder-intelligent-bus-servo-robotic-arm-for-programming)
 using Python 3.
 
 This library supports all the commands necessary to control the arm position, as well as commands to set parameters and
