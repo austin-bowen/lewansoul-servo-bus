@@ -10,9 +10,6 @@ which is used by the following products:
 This library supports all the commands necessary to control the servo positions, as well as commands to set parameters
 and read servo states such as position, temperature, and supply voltage.
 
-NOTICE: This library is for _direct_ communication with the bus servos; it is _not_ intended for communication with the
-servos through e.g. the Hiwonder Serial Bus Servo Controller. This allows for faster communication (115200 baud vs
-9600), access to _all_ the protocol functions, and less hardware.
 
 ### Quick Example
 
@@ -38,11 +35,14 @@ signals to half-duplex:
 
 ![USB to LewanSoul Servo Bus](images/usb-to-lewansoul-servo-bus.svg)
 
-(Note: If you want to isolate the computer power system from the servo power system, check out
-[this](images/usb-to-lewansoul-servo-bus-isolated.svg) schematic.)
-
-Notice that this configuration will cause all data sent by the computer to be "echoed" back to the computer.
+### Notes
+- If you want to isolate the computer power system from the servo power system, check out
+[this](images/usb-to-lewansoul-servo-bus-isolated.svg) schematic.
+- Notice that this configuration will cause all data sent by the computer to be "echoed" back to the computer.
 `ServoBus` discards echoed data by default, but that behavior can be disabled with `ServoBus(discard_echo=False)`.
+- This library is for _direct_ communication with the bus servos; it is _not_ intended for communication with the
+servos through e.g. the Hiwonder Serial Bus Servo Controller. This allows for faster communication (115200 baud vs
+9600), access to _all_ the protocol functions, and less hardware.
 
 
 ## Software
