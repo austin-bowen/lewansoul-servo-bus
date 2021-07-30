@@ -2,8 +2,12 @@
 Library for controlling a Hiwonder xArm robot arm using the `LewanSoul Bus Servo Communication Protocol
 <https://www.dropbox.com/sh/6pvnbjkwey2yr93/AACxdx1YI7Ps-4-y3zM9UBV7a?dl=0&preview=LewanSoul+Bus+Servo+Communication+Protocol.pdf>`_.
 
+TODO: Update the above URL.
+
 This code assumes that the computer running this code is connected to an Arduino-compatible microcontroller
 running the code in ``xarm.ino``, which acts as a serial to half-duplex UART converter.
+
+TODO: Remove all occurrences of "arm"
 """
 
 import struct
@@ -75,9 +79,9 @@ class _ServoPacket(NamedTuple):
     parameters: bytes
 
 
-class Xarm:
+class ServoBus:
     """
-    Controls a Hiwonder xArm robot arm using the LewanSoul Bus Servo Communication Protocol.
+    Controls servos using the LewanSoul Bus Servo Communication Protocol.
 
     Example usage::
 
@@ -98,6 +102,7 @@ class Xarm:
             timeout: float = 1.0,
             on_enter_power_on: bool = False,
             on_exit_power_off: bool = True,
+            discard_echo: bool = True,
             verify_checksum: bool = True
     ) -> None:
         """
@@ -105,6 +110,9 @@ class Xarm:
         :param timeout: How long to wait for a response from the controller before timing out. None means never timeout.
         :param on_enter_power_on: If the servos should be powered on when entering a "with ..." statement.
         :param on_exit_power_off: If the servos should be powered off when exiting a "with ..." statement.
+        :param discard_echo: Set to True (the default) if all bytes sent are echoed back by the hardware. If this is
+            True, then after this sends some number of bytes to the servos, it will automatically read/discard that same
+            number of bytes from the receive buffer.
         :param verify_checksum: If the checksum byte of received packets should be checked.
         """
 
@@ -115,6 +123,7 @@ class Xarm:
 
         self.on_enter_power_on = on_enter_power_on
         self.on_exit_power_off = on_exit_power_off
+        self.discard_echo = discard_echo
         self.verify_checksum = verify_checksum
 
         self._conn = serial.Serial(port=port_info.device, baudrate=115200, timeout=timeout)
@@ -168,10 +177,9 @@ class Xarm:
             # Send the packet
             self._conn.write(servo_packet)
 
-            # Wait for the ACK
-            response = self._conn.read(1)[0]
-            if response != 0xAA:
-                raise XarmException(f'Expected to receive ACK (0xAA); received 0x{response:x}.')
+            # Discard echoed bytes
+            if self.discard_echo:
+                self._conn.read(len(servo_packet))
 
     def _receive_packet(self) -> _ServoPacket:
         with self._conn_lock:
@@ -723,7 +731,7 @@ def _validate_temp_units(units: str) -> str:
     return units.upper()
 
 
-def control(arm: Xarm):
+def control(arm: ServoBus):
     print('Enter commands in the format (ID, angle [deg], time [s]):')
 
     arm.set_powered(BROADCAST_ID, True)
@@ -746,7 +754,7 @@ def control(arm: Xarm):
     arm.set_powered(BROADCAST_ID, False)
 
 
-def watch_arm_state(arm: Xarm) -> None:
+def watch_arm_state(arm: ServoBus) -> None:
     arm.set_powered(BROADCAST_ID, False)
 
     try:
@@ -765,7 +773,7 @@ def watch_arm_state(arm: Xarm) -> None:
         print()
 
 
-def test(arm: Xarm) -> int:
+def test(arm: ServoBus) -> int:
     # TODO: This.
 
     errors = 0
@@ -849,19 +857,19 @@ def main() -> int:
     choice = int(choice.strip())
 
     print()
-    with Xarm(on_enter_power_on=True) as arm:
+    with ServoBus(serial_port_regexp='/dev/ttyUSB0', on_enter_power_on=True) as servo_bus:
         # Test the arm?
         if choice == 1:
-            return test(arm)
+            return test(servo_bus)
 
         # Control the arm?
         elif choice == 2:
-            control(arm)
+            control(servo_bus)
             return 0
 
         # Watch the arm?
         elif choice == 3:
-            watch_arm_state(arm)
+            watch_arm_state(servo_bus)
             return 0
 
         # Invalid choice?
