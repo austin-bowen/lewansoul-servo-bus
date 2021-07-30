@@ -19,6 +19,8 @@ import serial
 import serial.tools.list_ports
 
 # General servo constants
+MIN_ID = 0
+MAX_ID = 253
 BROADCAST_ID = 254
 MIN_ANGLE_DEGREES = 0
 MAX_ANGLE_DEGREES = 240
@@ -79,6 +81,109 @@ class _ServoPacket(NamedTuple):
     parameters: bytes
 
 
+class Servo:
+    """Represents a specific servo on a servo bus."""
+
+    def __init__(self, id: int, bus: 'ServoBus', name: str = None) -> None:
+        """This is not meant to be instantiated directly. Use `ServoBus.get_servo(...)` instead."""
+
+        self.id = id
+        self.bus = bus
+        self.name = name
+
+    def __str__(self) -> str:
+        name = self.name or 'Servo'
+        return f'{name} (ID {self.id})'
+
+    def move_time_write(self, *args, **kwargs) -> None:
+        self.bus.move_time_write(self.id, *args, **kwargs)
+
+    def move_time_wait_write(self, *args, **kwargs) -> None:
+        self.bus.move_time_wait_write(self.id, *args, **kwargs)
+
+    def move_time_read(self) -> Tuple[float, float]:
+        return self.bus.move_time_read(self.id)
+
+    def move_time_wait_read(self) -> Tuple[float, float]:
+        return self.bus.move_time_wait_read(self.id)
+
+    def move_speed_write(self, *args, **kwargs) -> None:
+        self.bus.move_speed_write(self.id, *args, **kwargs)
+
+    def velocity_read(self, *args, **kwargs) -> List[float]:
+        return self.bus.velocity_read(self.id, *args, **kwargs)
+
+    def move_start(self) -> None:
+        self.bus.move_start(self.id)
+
+    def move_stop(self) -> None:
+        self.bus.move_stop(self.id)
+
+    def id_write(self, new_id: int) -> None:
+        self.bus.id_write(self.id, new_id)
+        self.id = new_id
+
+    def angle_offset_adjust(self, *args, **kwargs) -> None:
+        self.bus.angle_offset_adjust(self.id, *args, **kwargs)
+
+    def angle_offset_write(self) -> None:
+        self.bus.angle_offset_write(self.id)
+
+    def angle_offset_read(self) -> float:
+        return self.bus.angle_offset_read(self.id)
+
+    def angle_limit_write(self, *args, **kwargs) -> None:
+        self.bus.angle_limit_write(self.id, *args, **kwargs)
+
+    def angle_limit_read(self) -> Tuple[float, float]:
+        return self.bus.angle_limit_read(self.id)
+
+    def vin_limit_write(self, *args, **kwargs) -> None:
+        self.bus.vin_limit_write(self.id, *args, **kwargs)
+
+    def vin_limit_read(self) -> Tuple[float, float]:
+        return self.bus.vin_limit_read(self.id)
+
+    def temp_max_limit_write(self, *args, **kwargs) -> None:
+        return self.bus.temp_max_limit_write(self.id, *args, **kwargs)
+
+    def temp_max_limit_read(self, *args, **kwargs) -> float:
+        return self.bus.temp_max_limit_read(self.id, *args, **kwargs)
+
+    def temp_read(self, *args, **kwargs) -> float:
+        return self.bus.temp_read(self.id, *args, **kwargs)
+
+    def vin_read(self) -> float:
+        return self.bus.vin_read(self.id)
+
+    def pos_read(self) -> float:
+        return self.bus.pos_read(self.id)
+
+    def mode_write(self, *args, **kwargs) -> None:
+        return self.bus.mode_write(self.id, *args, **kwargs)
+
+    def mode_read(self) -> Tuple[str, Optional[int]]:
+        return self.bus.mode_read(self.id)
+
+    def set_powered(self, powered: bool) -> None:
+        return self.bus.set_powered(self.id, powered)
+
+    def is_powered(self) -> bool:
+        return self.bus.is_powered(self.id)
+
+    def led_ctrl_write(self, *args, **kwargs) -> None:
+        return self.bus.led_ctrl_write(self.id, *args, **kwargs)
+
+    def led_ctrl_read(self) -> bool:
+        return self.bus.led_ctrl_read(self.id)
+
+    def led_error_write(self, *args, **kwargs) -> None:
+        return self.bus.led_error_write(self.id, *args, **kwargs)
+
+    def led_error_read(self) -> Tuple[bool, bool, bool]:
+        return self.bus.led_error_read(self.id)
+
+
 class ServoBus:
     """
     Controls servos using the LewanSoul Bus Servo Communication Protocol.
@@ -119,7 +224,7 @@ class ServoBus:
         try:
             port_info = next(serial.tools.list_ports.grep(serial_port_regexp))
         except StopIteration:
-            raise XarmException(f'Could not find a serial port matching regexp "{serial_port_regexp}".')
+            raise ValueError(f'Could not find a serial port matching regexp "{serial_port_regexp}".')
 
         self.on_enter_power_on = on_enter_power_on
         self.on_exit_power_off = on_exit_power_off
@@ -152,10 +257,10 @@ class ServoBus:
         # - Length is the number of bytes being sent after and including this byte.
         # - Checksum is the LSB of ~(ID + Length + Command + Parameter0 + ...ParameterN).
 
-        if servo_id < 0 or servo_id > 254:
-            raise XarmException(f'servo_id must be in range [0, 254]; got {servo_id}.')
+        if servo_id < MIN_ID or servo_id > BROADCAST_ID:
+            raise ValueError(f'servo_id must be in range [{MIN_ID}, {BROADCAST_ID}]; got {servo_id}.')
         if command < 0 or command > 255:
-            raise XarmException(f'command must be in range [0, 255]; got {command}.')
+            raise ValueError(f'command must be in range [0, 255]; got {command}.')
 
         if parameters is None:
             parameters = b''
@@ -174,6 +279,12 @@ class ServoBus:
         # Insert the total length of the packet at the beginning of the packet
         servo_packet.insert(0, len(servo_packet))
         with self._conn_lock:
+            # Clear the input buffer
+            try:
+                self._conn.reset_input_buffer()
+            except AttributeError:
+                pass
+
             # Send the packet
             self._conn.write(servo_packet)
 
@@ -250,6 +361,9 @@ class ServoBus:
 
         if wait:
             time.sleep(time_s)
+
+    def get_servo(self, servo_id: int, name: str = None) -> Servo:
+        return Servo(servo_id, self, name=name)
 
     def move_time_write(self, servo_id: int, angle_degrees: Real, time_s: Real, wait: bool = False) -> None:
         """
@@ -363,10 +477,13 @@ class ServoBus:
     def id_write(self, old_id: int, new_id: int) -> None:
         """Give the specified servo a new ID."""
 
-        if new_id < 0 or new_id > 253:
-            raise ValueError(f'new_id must be in range [0, 253]; got {new_id}.')
+        if old_id < MIN_ID or old_id > MAX_ID:
+            raise ValueError(f'old_id must be in range [{MIN_ID}, {MAX_ID}]; got {old_id}.')
+        if new_id < MIN_ID or new_id > MAX_ID:
+            raise ValueError(f'new_id must be in range [{MIN_ID}, {MAX_ID}]; got {new_id}.')
 
-        self._send_packet(old_id, _SERVO_ID_WRITE, bytes((new_id,)))
+        if new_id != old_id:
+            self._send_packet(old_id, _SERVO_ID_WRITE, bytes((new_id,)))
 
     def angle_offset_adjust(self, servo_id: int, offset_degrees: Real, write: bool = True) -> None:
         """
@@ -621,7 +738,7 @@ class ServoBus:
             mode = 'motor'
             speed = int(speed)
         else:
-            raise XarmException(f'Received unknown mode: {mode}')
+            raise ValueError(f'Received unknown mode: {mode}')
 
         return mode, speed
 
@@ -632,6 +749,9 @@ class ServoBus:
 
     def is_powered(self, servo_id: int) -> bool:
         """Gets whether or not the servo is powered and attempting to hold its position."""
+
+        if servo_id < MIN_ID or servo_id > MAX_ID:
+            raise ValueError(f'servo_id must be in range [{MIN_ID}, {MAX_ID}]; got {servo_id}.')
 
         response = self._send_and_receive_packet(servo_id, _SERVO_LOAD_OR_UNLOAD_READ)
         return bool(response.parameters[0])
@@ -696,6 +816,12 @@ class XarmException(Exception):
     pass
 
 
+def truncate_angle(angle_degrees: Real) -> Real:
+    """:return: The angle, truncated to be in the range [0, 240] degrees."""
+
+    return min(max(MIN_ANGLE_DEGREES, angle_degrees), MAX_ANGLE_DEGREES)
+
+
 def _calculate_checksum(servo_id: int, length: int, command: int, parameters: Union[bytearray, bytes]) -> int:
     checksum = servo_id + length + command + sum(parameters)
     checksum = ~checksum & 0xFF
@@ -716,12 +842,6 @@ def _degrees_to_ticks(degrees: Real) -> int:
 
 def _ticks_to_degrees(ticks: int) -> float:
     return ticks * MAX_ANGLE_DEGREES / 1000
-
-
-def truncate_angle(angle_degrees: Real) -> Real:
-    """:return: The angle, truncated to be in the range [0, 240] degrees."""
-
-    return min(max(MIN_ANGLE_DEGREES, angle_degrees), MAX_ANGLE_DEGREES)
 
 
 def _validate_temp_units(units: str) -> str:
