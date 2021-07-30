@@ -7,8 +7,8 @@ which is used by the following products:
 - [Hiwonder xArm 1S robotic arm](https://www.hiwonder.hk/products/xarm-hiwonder-intelligent-bus-servo-robotic-arm-for-programming)
 - [Hiwonder xArm 2.0 robotic arm](https://www.hiwonder.hk/products/xarm2-0-hiwonder-new-intelligent-robotic-arm-support-scratch-python-assemble-programmable-robotic-kit)
 
-This library supports all the commands necessary to control the arm position, as well as commands to set parameters and
-read servo states such as position, temperature, and supply voltage.
+This library supports all the commands necessary to control the servo positions, as well as commands to set parameters
+and read servo states such as position, temperature, and supply voltage.
 
 NOTICE: This library is for _direct_ communication with the bus servos; it is _not_ intended for communication with the
 servos through e.g. the Hiwonder Serial Bus Servo Controller. This allows for faster communication (115200 baud vs
