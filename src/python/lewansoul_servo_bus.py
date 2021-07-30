@@ -1,5 +1,5 @@
 """
-Library for controlling a Hiwonder xArm robot arm using the `LewanSoul Bus Servo Communication Protocol
+Library for controlling bus servos using the `LewanSoul Bus Servo Communication Protocol
 <https://images-na.ssl-images-amazon.com/images/I/71WyZDfQwkL.pdf>`_.
 
 TODO: Move arm stuff into another Python file
