@@ -1,13 +1,8 @@
 """
 Library for controlling a Hiwonder xArm robot arm using the `LewanSoul Bus Servo Communication Protocol
-<https://www.dropbox.com/sh/6pvnbjkwey2yr93/AACxdx1YI7Ps-4-y3zM9UBV7a?dl=0&preview=LewanSoul+Bus+Servo+Communication+Protocol.pdf>`_.
+<https://images-na.ssl-images-amazon.com/images/I/71WyZDfQwkL.pdf>`_.
 
-TODO: Update the above URL.
-
-This code assumes that the computer running this code is connected to an Arduino-compatible microcontroller
-running the code in ``xarm.ino``, which acts as a serial to half-duplex UART converter.
-
-TODO: Remove all occurrences of "arm"
+TODO: Move arm stuff into another Python file
 """
 
 import struct
@@ -26,13 +21,14 @@ MIN_ANGLE_DEGREES = 0
 MAX_ANGLE_DEGREES = 240
 
 # xArm servo IDs
-GRIPPER_ID = 1
-WRIST_ID = 2
-OUTER_ELBOW_ID = 3
-INNER_ELBOW_ID = 4
-SHOULDER_ID = 5
-BASE_ID = 6
-SERVO_IDS = (GRIPPER_ID, WRIST_ID, OUTER_ELBOW_ID, INNER_ELBOW_ID, SHOULDER_ID, BASE_ID)
+XARM_GRIPPER_ID = 1
+XARM_WRIST_ID = 2
+XARM_OUTER_ELBOW_ID = 3
+XARM_INNER_ELBOW_ID = 4
+XARM_SHOULDER_ID = 5
+XARM_BASE_ID = 6
+XARM_SERVO_IDS = (
+    XARM_GRIPPER_ID, XARM_WRIST_ID, XARM_OUTER_ELBOW_ID, XARM_INNER_ELBOW_ID, XARM_SHOULDER_ID, XARM_BASE_ID)
 
 # Packet stuff
 _PACKET_HEADER = b'\x55\x55'
@@ -84,10 +80,10 @@ class _ServoPacket(NamedTuple):
 class Servo:
     """Represents a specific servo on a servo bus."""
 
-    def __init__(self, id: int, bus: 'ServoBus', name: str = None) -> None:
+    def __init__(self, id_: int, bus: 'ServoBus', name: str = None) -> None:
         """This is not meant to be instantiated directly. Use `ServoBus.get_servo(...)` instead."""
 
-        self.id = id
+        self.id = id_
         self.bus = bus
         self.name = name
 
@@ -188,6 +184,7 @@ class ServoBus:
     """
     Controls servos using the LewanSoul Bus Servo Communication Protocol.
 
+    # TODO: Update this
     Example usage::
 
         # Create a new Xarm instance using a "with ..." statement,
@@ -203,7 +200,7 @@ class ServoBus:
 
     def __init__(
             self,
-            serial_port_regexp: str = r'/dev/ttyACM\d+',
+            serial_port_regexp: str = r'/dev/ttyUSB\d+',
             timeout: float = 1.0,
             on_enter_power_on: bool = False,
             on_exit_power_off: bool = True,
@@ -248,7 +245,7 @@ class ServoBus:
             self._conn.close()
 
     def _send_packet(self, servo_id: int, command: int, parameters: Union[bytearray, bytes] = None) -> None:
-        # The xArm servo command packet format is as follows:
+        # The LewanSoul servo command packet format is as follows:
         #
         #     | Header: byte[2] = 0x55 0x55 | ID: byte | Length: byte | Command: byte |
         #     | Parameter: byte[0..n] | Checksum: byte |
@@ -296,7 +293,7 @@ class ServoBus:
         with self._conn_lock:
             header = self._conn.read(2)
             if header != _PACKET_HEADER:
-                raise XarmException(rf'Expected header {repr(_PACKET_HEADER)}; received header {repr(header)}.')
+                raise ServoBusException(rf'Expected header {repr(_PACKET_HEADER)}; received header {repr(header)}.')
 
             servo_id, length, command = self._conn.read(3)
             param_count = length - 3
@@ -306,7 +303,7 @@ class ServoBus:
         if self.verify_checksum:
             actual_checksum = _calculate_checksum(servo_id, length, command, parameters)
             if checksum != actual_checksum:
-                raise XarmException(
+                raise ServoBusException(
                     f'Checksum failed for received packet! '
                     f'Received checksum = {checksum}. Actual checksum = {actual_checksum}.'
                 )
@@ -324,13 +321,13 @@ class ServoBus:
 
         # Make sure received packet servo ID matches
         if response.servo_id != servo_id:
-            raise XarmException(
+            raise ServoBusException(
                 f'Received packet servo ID ({response.servo_id}) does not match sent packet servo ID ({servo_id}).'
             )
 
         # Make sure received packet command matches
         if response.command != command:
-            raise XarmException(
+            raise ServoBusException(
                 f'Received packet command ({response.command}) does not match sent packet command ({command}).'
             )
 
@@ -812,7 +809,7 @@ class ServoBus:
         return stalled, over_voltage, over_temp
 
 
-class XarmException(Exception):
+class ServoBusException(Exception):
     pass
 
 
@@ -851,10 +848,10 @@ def _validate_temp_units(units: str) -> str:
     return units.upper()
 
 
-def control(arm: ServoBus):
+def control(servo_bus: ServoBus):
     print('Enter commands in the format (ID, angle [deg], time [s]):')
 
-    arm.set_powered(BROADCAST_ID, True)
+    servo_bus.set_powered(BROADCAST_ID, True)
 
     while True:
         try:
@@ -868,32 +865,32 @@ def control(arm: ServoBus):
             print('Error:', e)
             continue
 
-        arm.move_time_write(servo_id, angle, time_s)
-        # arm.move_speed_write(servo_id, angle, time_s)
+        servo_bus.move_time_write(servo_id, angle, time_s)
+        # servo_bus.move_speed_write(servo_id, angle, time_s)
 
-    arm.set_powered(BROADCAST_ID, False)
+    servo_bus.set_powered(BROADCAST_ID, False)
 
 
-def watch_arm_state(arm: ServoBus) -> None:
-    arm.set_powered(BROADCAST_ID, False)
+def watch_xarm_state(servo_bus: ServoBus) -> None:
+    servo_bus.set_powered(BROADCAST_ID, False)
 
     try:
         while True:
-            positions = map(arm.pos_read, SERVO_IDS)
+            positions = map(servo_bus.pos_read, XARM_SERVO_IDS)
             positions = [int(round(p)) for p in positions]
 
-            vs = arm.velocity_read(*SERVO_IDS)
+            vs = servo_bus.velocity_read(*XARM_SERVO_IDS)
             vs = [int(round(v)) for v in vs]
 
             print()
-            print('Servo:\t' + '\t'.join(map(str, SERVO_IDS)))
+            print('Servo:\t' + '\t'.join(map(str, XARM_SERVO_IDS)))
             print('Pos. :\t' + '\t'.join(map(str, positions)))
             print('Vel. :\t' + '\t'.join(map(str, vs)))
     except KeyboardInterrupt:
         print()
 
 
-def test(arm: ServoBus) -> int:
+def test(servo_bus: ServoBus) -> int:
     # TODO: This.
 
     errors = 0
@@ -903,12 +900,12 @@ def test(arm: ServoBus) -> int:
     error = False
     delta = 20
     move_time = 1
-    for servo_id in SERVO_IDS:
+    for servo_id in XARM_SERVO_IDS:
         print(f'- Servo {servo_id}:')
 
         print(f'  - pos_read({servo_id}) -> ', end='', flush=True)
         try:
-            degrees = arm.pos_read(servo_id)
+            degrees = servo_bus.pos_read(servo_id)
             print(degrees)
         except Exception as e:
             print(f'Error: {e}')
@@ -921,7 +918,7 @@ def test(arm: ServoBus) -> int:
 
         print(f'  - move_time_write({servo_id}, {target}, {move_time}, wait=True) -> ', end='', flush=True)
         try:
-            print(arm.move_time_write(servo_id, target, move_time, wait=True))
+            print(servo_bus.move_time_write(servo_id, target, move_time, wait=True))
         except Exception as e:
             print(f'Error: {e}')
             error = True
@@ -930,7 +927,7 @@ def test(arm: ServoBus) -> int:
 
         print(f'  - pos_read({servo_id}) -> ', end='', flush=True)
         try:
-            new_degrees = arm.pos_read(servo_id)
+            new_degrees = servo_bus.pos_read(servo_id)
             print(new_degrees)
         except Exception as e:
             print(f'Error: {e}')
@@ -946,7 +943,7 @@ def test(arm: ServoBus) -> int:
 
         print(f'  - move_time_write({servo_id}, {degrees}, {move_time}, wait=True) -> ', end='', flush=True)
         try:
-            print(arm.move_time_write(servo_id, degrees, move_time, wait=True))
+            print(servo_bus.move_time_write(servo_id, degrees, move_time, wait=True))
         except Exception as e:
             print(f'Error: {e}')
             error = True
@@ -989,7 +986,7 @@ def main() -> int:
 
         # Watch the arm?
         elif choice == 3:
-            watch_arm_state(servo_bus)
+            watch_xarm_state(servo_bus)
             return 0
 
         # Invalid choice?
