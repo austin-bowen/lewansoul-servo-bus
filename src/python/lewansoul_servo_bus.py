@@ -1,8 +1,6 @@
 """
 Library for controlling bus servos using the `LewanSoul Bus Servo Communication Protocol
 <https://images-na.ssl-images-amazon.com/images/I/71WyZDfQwkL.pdf>`_.
-
-TODO: Move arm stuff into another Python file
 """
 
 import struct
@@ -19,16 +17,6 @@ MAX_ID = 253
 BROADCAST_ID = 254
 MIN_ANGLE_DEGREES = 0
 MAX_ANGLE_DEGREES = 240
-
-# xArm servo IDs
-XARM_GRIPPER_ID = 1
-XARM_WRIST_ID = 2
-XARM_OUTER_ELBOW_ID = 3
-XARM_INNER_ELBOW_ID = 4
-XARM_SHOULDER_ID = 5
-XARM_BASE_ID = 6
-XARM_SERVO_IDS = (
-    XARM_GRIPPER_ID, XARM_WRIST_ID, XARM_OUTER_ELBOW_ID, XARM_INNER_ELBOW_ID, XARM_SHOULDER_ID, XARM_BASE_ID)
 
 # Packet stuff
 _PACKET_HEADER = b'\x55\x55'
@@ -106,8 +94,8 @@ class Servo:
     def move_speed_write(self, *args, **kwargs) -> None:
         self.bus.move_speed_write(self.id, *args, **kwargs)
 
-    def velocity_read(self, *args, **kwargs) -> List[float]:
-        return self.bus.velocity_read(self.id, *args, **kwargs)
+    def velocity_read(self, *args, **kwargs) -> float:
+        return self.bus.velocity_read(self.id, *args, **kwargs)[0]
 
     def move_start(self) -> None:
         self.bus.move_start(self.id)
@@ -182,16 +170,16 @@ class Servo:
 
 class ServoBus:
     """
-    Controls servos using the LewanSoul Bus Servo Communication Protocol.
+    Controls bus servos using the LewanSoul Bus Servo Communication Protocol.
 
     # TODO: Update this
     Example usage::
 
-        # Create a new Xarm instance using a "with ..." statement,
+        # Create a new ServoBus instance using a "with ..." statement,
         # which by default will power on all the servos.
-        with Xarm() as arm:
-            # Move the gripper servo to the 120 degree position over 1 second
-            arm.move_time_write(GRIPPER_ID, 120, 1)
+        with ServoBus(...) as servo_bus:
+            # Move the servo with ID 2 to the 120 degree position over 1 second
+            servo_bus.move_time_write(2, 120, 1)
 
             # Wait a second for the servo to get in position before leaving the "with ..." statement,
             # which by default will power off all the servos before closing the serial connection.
@@ -846,156 +834,3 @@ def _validate_temp_units(units: str) -> str:
         raise ValueError(f'Units must be either "C" or "F"; got "{units}".')
 
     return units.upper()
-
-
-def control(servo_bus: ServoBus):
-    print('Enter commands in the format (ID, angle [deg], time [s]):')
-
-    servo_bus.set_powered(BROADCAST_ID, True)
-
-    while True:
-        try:
-            command = input()
-            servo_id, angle, time_s = [a.strip() for a in command.split(',')]
-            servo_id, angle, time_s = int(servo_id), float(angle), float(time_s)
-        except KeyboardInterrupt:
-            print()
-            return
-        except Exception as e:
-            print('Error:', e)
-            continue
-
-        servo_bus.move_time_write(servo_id, angle, time_s)
-        # servo_bus.move_speed_write(servo_id, angle, time_s)
-
-    servo_bus.set_powered(BROADCAST_ID, False)
-
-
-def watch_xarm_state(servo_bus: ServoBus) -> None:
-    servo_bus.set_powered(BROADCAST_ID, False)
-
-    try:
-        while True:
-            positions = map(servo_bus.pos_read, XARM_SERVO_IDS)
-            positions = [int(round(p)) for p in positions]
-
-            vs = servo_bus.velocity_read(*XARM_SERVO_IDS)
-            vs = [int(round(v)) for v in vs]
-
-            print()
-            print('Servo:\t' + '\t'.join(map(str, XARM_SERVO_IDS)))
-            print('Pos. :\t' + '\t'.join(map(str, positions)))
-            print('Vel. :\t' + '\t'.join(map(str, vs)))
-    except KeyboardInterrupt:
-        print()
-
-
-def test(servo_bus: ServoBus) -> int:
-    # TODO: This.
-
-    errors = 0
-
-    # pos_read
-    print('\nTesting pos_read and move_time_write...')
-    error = False
-    delta = 20
-    move_time = 1
-    for servo_id in XARM_SERVO_IDS:
-        print(f'- Servo {servo_id}:')
-
-        print(f'  - pos_read({servo_id}) -> ', end='', flush=True)
-        try:
-            degrees = servo_bus.pos_read(servo_id)
-            print(degrees)
-        except Exception as e:
-            print(f'Error: {e}')
-            error = True
-            errors += 1
-            continue
-
-        degrees = truncate_angle(degrees)
-        target = (degrees - delta) if degrees > 120 else (degrees + delta)
-
-        print(f'  - move_time_write({servo_id}, {target}, {move_time}, wait=True) -> ', end='', flush=True)
-        try:
-            print(servo_bus.move_time_write(servo_id, target, move_time, wait=True))
-        except Exception as e:
-            print(f'Error: {e}')
-            error = True
-            errors += 1
-            continue
-
-        print(f'  - pos_read({servo_id}) -> ', end='', flush=True)
-        try:
-            new_degrees = servo_bus.pos_read(servo_id)
-            print(new_degrees)
-        except Exception as e:
-            print(f'Error: {e}')
-            error = True
-            errors += 1
-            continue
-
-        # Arm does not appear to have moved?
-        if abs(degrees - new_degrees) < 1:
-            print(f'  - Error: Servo does not appear to have moved.')
-            error = True
-            errors += 1
-
-        print(f'  - move_time_write({servo_id}, {degrees}, {move_time}, wait=True) -> ', end='', flush=True)
-        try:
-            print(servo_bus.move_time_write(servo_id, degrees, move_time, wait=True))
-        except Exception as e:
-            print(f'Error: {e}')
-            error = True
-            errors += 1
-
-    print('- FAIL' if error else '- Pass')
-
-    return errors
-
-
-def main() -> int:
-    print('Options:')
-    print('1. Test - Run automated tests on the arm')
-    print('2. Control - Use keyboard commands to control the arm')
-    print('3. Watch State - Show various states of the arm in real time')
-    print()
-
-    try:
-        choice = input('Choice: ')
-    except KeyboardInterrupt:
-        print()
-        return 0
-
-    if not choice:
-        print('No choice given.')
-        return 0
-
-    choice = int(choice.strip())
-
-    print()
-    with ServoBus(serial_port_regexp='/dev/ttyUSB0', on_enter_power_on=True) as servo_bus:
-        # Test the arm?
-        if choice == 1:
-            return test(servo_bus)
-
-        # Control the arm?
-        elif choice == 2:
-            control(servo_bus)
-            return 0
-
-        # Watch the arm?
-        elif choice == 3:
-            watch_xarm_state(servo_bus)
-            return 0
-
-        # Invalid choice?
-        else:
-            print(f'Invalid choice!')
-            return 1
-
-
-if __name__ == '__main__':
-    import sys
-
-    sys.exit(main())
