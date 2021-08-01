@@ -9,8 +9,6 @@ XARM_OUTER_ELBOW_ID = 3
 XARM_INNER_ELBOW_ID = 4
 XARM_SHOULDER_ID = 5
 XARM_BASE_ID = 6
-XARM_SERVO_IDS = (
-    XARM_GRIPPER_ID, XARM_WRIST_ID, XARM_OUTER_ELBOW_ID, XARM_INNER_ELBOW_ID, XARM_SHOULDER_ID, XARM_BASE_ID)
 
 
 class Xarm:
@@ -30,12 +28,21 @@ class Xarm:
 
         self.gripper = servo_bus.get_servo(gripper_id, name='gripper')
         self.wrist = servo_bus.get_servo(wrist_id, name='wrist')
-        self.outer_elbow = servo_bus.get_servo(outer_elbow_id, name='outer elbow')
-        self.inner_elbow = servo_bus.get_servo(inner_elbow_id, name='inner elbow')
+        self.outer_elbow = servo_bus.get_servo(
+            outer_elbow_id, name='outer elbow')
+        self.inner_elbow = servo_bus.get_servo(
+            inner_elbow_id, name='inner elbow')
         self.shoulder = servo_bus.get_servo(shoulder_id, name='shoulder')
         self.base = servo_bus.get_servo(base_id, name='base')
 
-        self._servos = (self.gripper, self.wrist, self.outer_elbow, self.inner_elbow, self.shoulder, self.base)
+        self._servos = (
+            self.gripper,
+            self.wrist,
+            self.outer_elbow,
+            self.inner_elbow,
+            self.shoulder,
+            self.base,
+        )
 
     def __str__(self) -> str:
         return self.name or 'xArm'
@@ -95,7 +102,8 @@ def test(arm: Xarm) -> int:
         target = (degrees - delta) if degrees > 120 else (degrees + delta)
 
         # Move the servo to the target position
-        print(f'  - move_time_write({target}, {move_time}, wait=True) -> ', end='', flush=True)
+        print(f'  - move_time_write({target}, {move_time}, wait=True) -> ',
+              end='', flush=True)
         try:
             print(servo.move_time_write(target, move_time, wait=True))
         except Exception as e:
@@ -122,7 +130,8 @@ def test(arm: Xarm) -> int:
             errors += 1
 
         # Move the servo back to its original location
-        print(f'  - move_time_write({degrees}, {move_time}, wait=True) -> ', end='', flush=True)
+        print(f'  - move_time_write({degrees}, {move_time}, wait=True) -> ',
+              end='', flush=True)
         try:
             print(servo.move_time_write(degrees, move_time, wait=True))
         except Exception as e:
@@ -141,16 +150,18 @@ def watch_xarm_state(arm: Xarm) -> None:
 
     try:
         while True:
+            servo_ids = [str(servo.id) for servo in arm.servos]
+
             positions = [servo.pos_read() for servo in arm.servos]
-            positions = (int(round(p)) for p in positions)
+            positions = (str(int(round(p))) for p in positions)
 
             vs = [servo.velocity_read() for servo in arm.servos]
-            vs = (int(round(v)) for v in vs)
+            vs = (str(int(round(v))) for v in vs)
 
             print()
-            print('Servo:\t' + '\t'.join(map(str, XARM_SERVO_IDS)))
-            print('Pos. :\t' + '\t'.join(map(str, positions)))
-            print('Vel. :\t' + '\t'.join(map(str, vs)))
+            print('Servo:\t' + '\t'.join(servo_ids))
+            print('Pos. :\t' + '\t'.join(positions))
+            print('Vel. :\t' + '\t'.join(vs))
     except KeyboardInterrupt:
         print()
 
@@ -169,7 +180,8 @@ def main() -> None:
     # Get choice of what to do
     print()
     print('Options:')
-    print('1. Test - Automatically move each joint a small amount to verify functionality')
+    print('1. Test - Automatically move each joint a small amount to verify '
+          'functionality')
     print('2. Control - Use keyboard commands to control the arm')
     print('3. Watch State - Show various states of the arm in real time')
     print()
