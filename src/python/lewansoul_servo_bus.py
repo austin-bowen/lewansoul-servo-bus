@@ -9,7 +9,6 @@ from multiprocessing import RLock
 from typing import Union, NamedTuple, Literal, Tuple, List, Optional
 
 import serial
-import serial.tools.list_ports
 
 # General servo constants
 MIN_ID = 0
@@ -192,18 +191,26 @@ class ServoBus:
 
     def __init__(
             self,
-            serial_port_regexp: str = r'/dev/ttyUSB\d+',
+            port: Optional[str] = None,
             timeout: float = 1.0,
+            baudrate: int = 115200,
+            serial_conn=None,
             on_enter_power_on: bool = False,
             on_exit_power_off: bool = True,
             discard_echo: bool = True,
             verify_checksum: bool = True
     ) -> None:
         """
-        :param serial_port_regexp: Search pattern passed to
-            serial.tools.list_ports.grep used to find the controller.
+        :param port: The serial port to connect to.
+            Ignored if `serial_conn` is given.
+        :param baudrate: The baud rate to use. Hiwonder servos use 115200.
+            Ignored if `serial_conn` is given.
         :param timeout: How long to wait for a response from the controller
             before timing out. None means never timeout.
+            Ignored if `serial_conn` is given.
+        :param serial_conn: Serial connection object to use. Useful if you
+            already have a connection, or if you want to wrap this protocol in
+            your own protocol.
         :param on_enter_power_on: If the servos should be powered on when
             entering a "with ..." statement.
         :param on_exit_power_off: If the servos should be powered off when
@@ -216,19 +223,13 @@ class ServoBus:
             be checked.
         """
 
-        try:
-            port_info = next(serial.tools.list_ports.grep(serial_port_regexp))
-        except StopIteration:
-            raise ValueError(f'Could not find a serial port matching regexp '
-                             f'"{serial_port_regexp}".')
-
         self.on_enter_power_on = on_enter_power_on
         self.on_exit_power_off = on_exit_power_off
         self.discard_echo = discard_echo
         self.verify_checksum = verify_checksum
 
-        self._conn = serial.Serial(port=port_info.device, baudrate=115200,
-                                   timeout=timeout)
+        self._conn = serial_conn or serial.Serial(
+            port=port, baudrate=baudrate, timeout=timeout)
         self._conn_lock = RLock()
 
     def __enter__(self):
