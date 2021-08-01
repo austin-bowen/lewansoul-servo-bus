@@ -210,7 +210,8 @@ class ServoBus:
             Ignored if `serial_conn` is given.
         :param serial_conn: Serial connection object to use. Useful if you
             already have a connection, or if you want to wrap this protocol in
-            your own protocol.
+            your own protocol. Must have at least `read(...)` and `write(...)`
+            methods.
         :param on_enter_power_on: If the servos should be powered on when
             entering a "with ..." statement.
         :param on_exit_power_off: If the servos should be powered off when
@@ -228,9 +229,15 @@ class ServoBus:
         self.discard_echo = discard_echo
         self.verify_checksum = verify_checksum
 
-        self._conn = serial_conn or serial.Serial(
-            port=port, baudrate=baudrate, timeout=timeout)
-        self._conn_lock = RLock()
+        if serial_conn:
+            self._serial_conn = serial_conn
+            self._close_on_exit = False
+        else:
+            self._serial_conn = serial.Serial(
+                port=port, baudrate=baudrate, timeout=timeout)
+            self._close_on_exit = True
+
+        self._serial_conn_lock = RLock()
 
     def __enter__(self):
         if self.on_enter_power_on:
@@ -243,7 +250,9 @@ class ServoBus:
             if self.on_exit_power_off:
                 self.set_powered(BROADCAST_ID, False)
         finally:
-            self._conn.close()
+            if self._close_on_exit:
+                with self._serial_conn_lock:
+                    self._serial_conn.close()
 
     def _send_packet(self, servo_id: int, command: int,
                      parameters: Union[bytearray, bytes] = None) -> None:
@@ -282,32 +291,32 @@ class ServoBus:
 
         # Insert the total length of the packet at the beginning of the packet
         servo_packet.insert(0, len(servo_packet))
-        with self._conn_lock:
+        with self._serial_conn_lock:
             # Clear the input buffer
             try:
-                self._conn.reset_input_buffer()
+                self._serial_conn.reset_input_buffer()
             except AttributeError:
                 pass
 
             # Send the packet
-            self._conn.write(servo_packet)
+            self._serial_conn.write(servo_packet)
 
             # Discard echoed bytes
             if self.discard_echo:
-                self._conn.read(len(servo_packet))
+                self._serial_conn.read(len(servo_packet))
 
     def _receive_packet(self) -> _ServoPacket:
-        with self._conn_lock:
-            header = self._conn.read(2)
+        with self._serial_conn_lock:
+            header = self._serial_conn.read(2)
             if header != _PACKET_HEADER:
                 raise ServoBusException(
                     f'Expected header {repr(_PACKET_HEADER)}; '
                     f'received header {repr(header)}.')
 
-            servo_id, length, command = self._conn.read(3)
+            servo_id, length, command = self._serial_conn.read(3)
             param_count = length - 3
-            parameters = self._conn.read(param_count)
-            checksum = self._conn.read(1)[0]
+            parameters = self._serial_conn.read(param_count)
+            checksum = self._serial_conn.read(1)[0]
 
         if self.verify_checksum:
             actual_checksum = _calculate_checksum(servo_id, length, command,
@@ -326,7 +335,7 @@ class ServoBus:
             command: int,
             parameters: Union[bytearray, bytes] = None
     ) -> _ServoPacket:
-        with self._conn_lock:
+        with self._serial_conn_lock:
             self._send_packet(servo_id, command, parameters=parameters)
             response = self._receive_packet()
 
