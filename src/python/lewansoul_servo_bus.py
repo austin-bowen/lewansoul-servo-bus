@@ -1,6 +1,6 @@
 """
-Library for controlling bus servos using the `LewanSoul Bus Servo Communication Protocol
-<https://images-na.ssl-images-amazon.com/images/I/71WyZDfQwkL.pdf>`_.
+Library for controlling bus servos using the `LewanSoul Bus Servo Communication
+Protocol <https://images-na.ssl-images-amazon.com/images/I/71WyZDfQwkL.pdf>`_.
 """
 
 import struct
@@ -69,7 +69,10 @@ class Servo:
     """Represents a specific servo on a servo bus."""
 
     def __init__(self, id_: int, bus: 'ServoBus', name: str = None) -> None:
-        """This is not meant to be instantiated directly. Use `ServoBus.get_servo(...)` instead."""
+        """
+        This is not meant to be instantiated directly. Use
+        `ServoBus.get_servo(...)` instead.
+        """
 
         self.id = id_
         self.bus = bus
@@ -181,8 +184,9 @@ class ServoBus:
             # Move the servo with ID 2 to the 120 degree position over 1 second
             servo_bus.move_time_write(2, 120, 1)
 
-            # Wait a second for the servo to get in position before leaving the "with ..." statement,
-            # which by default will power off all the servos before closing the serial connection.
+            # Wait a second for the servo to get in position before leaving the
+            # "with ..." statement, which by default will power off all the
+            # servos before closing the serial connection.
             time.sleep(1)
     """
 
@@ -196,27 +200,35 @@ class ServoBus:
             verify_checksum: bool = True
     ) -> None:
         """
-        :param serial_port_regexp: Search pattern passed to serial.tools.list_ports.grep used to find the controller.
-        :param timeout: How long to wait for a response from the controller before timing out. None means never timeout.
-        :param on_enter_power_on: If the servos should be powered on when entering a "with ..." statement.
-        :param on_exit_power_off: If the servos should be powered off when exiting a "with ..." statement.
-        :param discard_echo: Set to True (the default) if all bytes sent are echoed back by the hardware. If this is
-            True, then after this sends some number of bytes to the servos, it will automatically read/discard that same
-            number of bytes from the receive buffer.
-        :param verify_checksum: If the checksum byte of received packets should be checked.
+        :param serial_port_regexp: Search pattern passed to
+            serial.tools.list_ports.grep used to find the controller.
+        :param timeout: How long to wait for a response from the controller
+            before timing out. None means never timeout.
+        :param on_enter_power_on: If the servos should be powered on when
+            entering a "with ..." statement.
+        :param on_exit_power_off: If the servos should be powered off when
+            exiting a "with ..." statement.
+        :param discard_echo: Set to True (the default) if all bytes sent are
+            echoed back by the hardware. If this is True, then after this sends
+            some number of bytes to the servos, it will automatically
+            read/discard that same number of bytes from the receive buffer.
+        :param verify_checksum: If the checksum byte of received packets should
+            be checked.
         """
 
         try:
             port_info = next(serial.tools.list_ports.grep(serial_port_regexp))
         except StopIteration:
-            raise ValueError(f'Could not find a serial port matching regexp "{serial_port_regexp}".')
+            raise ValueError(f'Could not find a serial port matching regexp '
+                             f'"{serial_port_regexp}".')
 
         self.on_enter_power_on = on_enter_power_on
         self.on_exit_power_off = on_exit_power_off
         self.discard_echo = discard_echo
         self.verify_checksum = verify_checksum
 
-        self._conn = serial.Serial(port=port_info.device, baudrate=115200, timeout=timeout)
+        self._conn = serial.Serial(port=port_info.device, baudrate=115200,
+                                   timeout=timeout)
         self._conn_lock = RLock()
 
     def __enter__(self):
@@ -232,20 +244,26 @@ class ServoBus:
         finally:
             self._conn.close()
 
-    def _send_packet(self, servo_id: int, command: int, parameters: Union[bytearray, bytes] = None) -> None:
+    def _send_packet(self, servo_id: int, command: int,
+                     parameters: Union[bytearray, bytes] = None) -> None:
         # The LewanSoul servo command packet format is as follows:
         #
-        #     | Header: byte[2] = 0x55 0x55 | ID: byte | Length: byte | Command: byte |
-        #     | Parameter: byte[0..n] | Checksum: byte |
+        #     | Header: byte[2] = 0x55 0x55 | ID: byte | Length: byte |
+        #     | Command: byte | Parameter: byte[0..n] | Checksum: byte |
         #
         # - ID is the servo ID.
-        # - Length is the number of bytes being sent after and including this byte.
-        # - Checksum is the LSB of ~(ID + Length + Command + Parameter0 + ...ParameterN).
+        # - Length is the number of bytes being sent after and including this
+        #   byte.
+        # - Checksum is the LSB of ~(ID + Length + Command + Parameter0 +
+        #   ...ParameterN).
 
         if servo_id < MIN_ID or servo_id > BROADCAST_ID:
-            raise ValueError(f'servo_id must be in range [{MIN_ID}, {BROADCAST_ID}]; got {servo_id}.')
+            raise ValueError(
+                f'servo_id must be in range [{MIN_ID}, {BROADCAST_ID}]; '
+                f'got {servo_id}.')
         if command < 0 or command > 255:
-            raise ValueError(f'command must be in range [0, 255]; got {command}.')
+            raise ValueError(
+                f'command must be in range [0, 255]; got {command}.')
 
         if parameters is None:
             parameters = b''
@@ -281,7 +299,9 @@ class ServoBus:
         with self._conn_lock:
             header = self._conn.read(2)
             if header != _PACKET_HEADER:
-                raise ServoBusException(rf'Expected header {repr(_PACKET_HEADER)}; received header {repr(header)}.')
+                raise ServoBusException(
+                    f'Expected header {repr(_PACKET_HEADER)}; '
+                    f'received header {repr(header)}.')
 
             servo_id, length, command = self._conn.read(3)
             param_count = length - 3
@@ -289,11 +309,13 @@ class ServoBus:
             checksum = self._conn.read(1)[0]
 
         if self.verify_checksum:
-            actual_checksum = _calculate_checksum(servo_id, length, command, parameters)
+            actual_checksum = _calculate_checksum(servo_id, length, command,
+                                                  parameters)
             if checksum != actual_checksum:
                 raise ServoBusException(
                     f'Checksum failed for received packet! '
-                    f'Received checksum = {checksum}. Actual checksum = {actual_checksum}.'
+                    f'Received checksum = {checksum}. '
+                    f'Actual checksum = {actual_checksum}.'
                 )
 
         return _ServoPacket(servo_id, command, parameters)
@@ -310,29 +332,37 @@ class ServoBus:
         # Make sure received packet servo ID matches
         if response.servo_id != servo_id:
             raise ServoBusException(
-                f'Received packet servo ID ({response.servo_id}) does not match sent packet servo ID ({servo_id}).'
+                f'Received packet servo ID ({response.servo_id}) does not '
+                f'match sent packet servo ID ({servo_id}).'
             )
 
         # Make sure received packet command matches
         if response.command != command:
             raise ServoBusException(
-                f'Received packet command ({response.command}) does not match sent packet command ({command}).'
+                f'Received packet command ({response.command}) does not '
+                f'match sent packet command ({command}).'
             )
 
         return response
 
-    def _move_time_write(self, servo_id: int, angle_degrees: Real, time_s: Real, command: int, wait: bool) -> None:
+    def _move_time_write(self, servo_id: int, angle_degrees: Real, time_s: Real,
+                         command: int, wait: bool) -> None:
         """
         :param servo_id:
-        :param angle_degrees: Should be in the range [0, 240] degrees; will be truncated if outside this range.
-        :param time_s: Should be in the range [0, 30] seconds; will be truncated if outside this range.
-        :param wait: Whether or not to wait time_s seconds after sending the command.
-        :param command: Acceptable values are _SERVO_MOVE_TIME_WRITE, or _SERVO_MOVE_TIME_WAIT_WRITE.
+        :param angle_degrees: Should be in the range [0, 240] degrees; will be
+            truncated if outside this range.
+        :param time_s: Should be in the range [0, 30] seconds; will be truncated
+            if outside this range.
+        :param wait: Whether or not to wait time_s seconds after sending the
+            command.
+        :param command: Acceptable values are _SERVO_MOVE_TIME_WRITE, or
+            _SERVO_MOVE_TIME_WAIT_WRITE.
         """
 
         if command not in {_SERVO_MOVE_TIME_WRITE, _SERVO_MOVE_TIME_WAIT_WRITE}:
             raise ValueError(
-                f'Command must be either {_SERVO_MOVE_TIME_WRITE} or {_SERVO_MOVE_TIME_WAIT_WRITE}; got {command}.'
+                f'Command must be either {_SERVO_MOVE_TIME_WRITE} or '
+                f'{_SERVO_MOVE_TIME_WAIT_WRITE}; got {command}.'
             )
 
         angle_degrees = truncate_angle(angle_degrees)
@@ -350,39 +380,54 @@ class ServoBus:
     def get_servo(self, servo_id: int, name: str = None) -> Servo:
         return Servo(servo_id, self, name=name)
 
-    def move_time_write(self, servo_id: int, angle_degrees: Real, time_s: Real, wait: bool = False) -> None:
+    def move_time_write(self, servo_id: int, angle_degrees: Real, time_s: Real,
+                        wait: bool = False) -> None:
         """
-        Tells the servo to start moving to the specified angle within the specified amount of time.
+        Tells the servo to start moving to the specified angle within the
+        specified amount of time.
 
         :param servo_id:
-        :param angle_degrees: Should be in the range [0, 240] degrees; will be truncated if outside this range.
-        :param time_s: Should be in the range [0, 30] s; will be truncated if outside this range.
-        :param wait: Whether or not to wait time_s seconds after sending the command.
+        :param angle_degrees: Should be in the range [0, 240] degrees; will be
+            truncated if outside this range.
+        :param time_s: Should be in the range [0, 30] s; will be truncated if
+            outside this range.
+        :param wait: Whether or not to wait time_s seconds after sending the
+            command.
         """
 
-        return self._move_time_write(servo_id, angle_degrees, time_s, _SERVO_MOVE_TIME_WRITE, wait)
+        return self._move_time_write(servo_id, angle_degrees, time_s,
+                                     _SERVO_MOVE_TIME_WRITE, wait)
 
-    def move_time_wait_write(self, servo_id: int, angle_degrees: Real, time_s: Real) -> None:
+    def move_time_wait_write(self, servo_id: int, angle_degrees: Real,
+                             time_s: Real) -> None:
         """
-        Just like move_time_write(), except the servo will not start moving until move_start() is called.
+        Just like move_time_write(), except the servo will not start moving
+        until move_start() is called.
 
         :param servo_id:
-        :param angle_degrees: Should be in the range [0, 240] degrees; will be truncated if outside this range.
-        :param time_s: Should be in the range [0, 30] s; will be truncated if outside this range.
+        :param angle_degrees: Should be in the range [0, 240] degrees; will be
+            truncated if outside this range.
+        :param time_s: Should be in the range [0, 30] s; will be truncated if
+            outside this range.
         """
 
-        return self._move_time_write(servo_id, angle_degrees, time_s, _SERVO_MOVE_TIME_WAIT_WRITE, False)
+        return self._move_time_write(servo_id, angle_degrees, time_s,
+                                     _SERVO_MOVE_TIME_WAIT_WRITE, False)
 
-    def _move_time_read(self, servo_id: int, command: int) -> Tuple[float, float]:
+    def _move_time_read(
+            self, servo_id: int, command: int
+    ) -> Tuple[float, float]:
         """
         :param servo_id:
-        :param command: Either _SERVO_MOVE_TIME_READ or _SERVO_MOVE_TIME_WAIT_READ.
+        :param command: Either _SERVO_MOVE_TIME_READ or
+            _SERVO_MOVE_TIME_WAIT_READ.
         :return: A tuple of (angle_degrees, time_s).
         """
 
         if command not in {_SERVO_MOVE_TIME_READ, _SERVO_MOVE_TIME_WAIT_READ}:
             raise ValueError(
-                f'Command must be either {_SERVO_MOVE_TIME_READ} or {_SERVO_MOVE_TIME_WAIT_READ}; got {command}.'
+                f'Command must be either {_SERVO_MOVE_TIME_READ} or '
+                f'{_SERVO_MOVE_TIME_WAIT_READ}; got {command}.'
             )
 
         response = self._send_and_receive_packet(servo_id, command)
@@ -412,15 +457,19 @@ class ServoBus:
         :return: A tuple of (angle_degrees, time_s).
         """
 
-        return self._move_time_read(servo_id, command=_SERVO_MOVE_TIME_WAIT_READ)
+        return self._move_time_read(servo_id,
+                                    command=_SERVO_MOVE_TIME_WAIT_READ)
 
-    def move_speed_write(self, servo_id: int, angle_degrees: Real, speed_dps: Real, wait: bool = False) -> None:
+    def move_speed_write(self, servo_id: int, angle_degrees: Real,
+                         speed_dps: Real, wait: bool = False) -> None:
         """
         Tells the servo to go to the specified angle at a certain speed.
 
         :param servo_id:
-        :param angle_degrees: Should be in the range [0, 240] degrees; will be truncated if outside this range.
-        :param speed_dps: The speed in degrees-per-second that the servo should move to the target.
+        :param angle_degrees: Should be in the range [0, 240] degrees; will be
+            truncated if outside this range.
+        :param speed_dps: The speed in degrees-per-second that the servo should
+            move to the target.
         :param wait: Whether or not to wait until the move is complete.
         """
 
@@ -430,18 +479,25 @@ class ServoBus:
 
         self.move_time_write(servo_id, angle_degrees, time_s, wait=wait)
 
-    def velocity_read(self, *servo_ids: int, period_s: Real = 0.1) -> List[float]:
+    def velocity_read(
+            self, *servo_ids: int, period_s: Real = 0.1
+    ) -> List[float]:
         """
-        Determines the servo's current velocity by taking two position measurements period_s seconds apart.
+        Determines the servo's current velocity by taking two position
+        measurements period_s seconds apart.
 
         :param servo_ids: One or more servo IDs.
-        :param period_s: The observation period -- how long to wait between position measurements.
-        :return: The current velocity of the servo in degrees per second (may be negative).
+        :param period_s: The observation period -- how long to wait between
+            position measurements.
+        :return: The current velocity of the servo in degrees per second
+            (may be negative).
         """
 
-        measurements0 = [(time.monotonic(), self.pos_read(servo_id)) for servo_id in servo_ids]
+        measurements0 = [(time.monotonic(), self.pos_read(servo_id)) for
+                         servo_id in servo_ids]
         time.sleep(period_s)
-        measurements1 = [(time.monotonic(), self.pos_read(servo_id)) for servo_id in servo_ids]
+        measurements1 = [(time.monotonic(), self.pos_read(servo_id)) for
+                         servo_id in servo_ids]
 
         velocities = []
         for measurement0, measurement1 in zip(measurements0, measurements1):
@@ -452,7 +508,11 @@ class ServoBus:
         return velocities
 
     def move_start(self, servo_id: int) -> None:
-        """Tells the servo to start the motion specified by the last call to move_time_wait_write()."""
+        """
+        Tells the servo to start the motion specified by the last call to
+        move_time_wait_write().
+        """
+
         self._send_packet(servo_id, _SERVO_MOVE_START)
 
     def move_stop(self, servo_id: int) -> None:
@@ -463,25 +523,32 @@ class ServoBus:
         """Give the specified servo a new ID."""
 
         if old_id < MIN_ID or old_id > MAX_ID:
-            raise ValueError(f'old_id must be in range [{MIN_ID}, {MAX_ID}]; got {old_id}.')
+            raise ValueError(
+                f'old_id must be in range [{MIN_ID}, {MAX_ID}]; got {old_id}.')
         if new_id < MIN_ID or new_id > MAX_ID:
-            raise ValueError(f'new_id must be in range [{MIN_ID}, {MAX_ID}]; got {new_id}.')
+            raise ValueError(
+                f'new_id must be in range [{MIN_ID}, {MAX_ID}]; got {new_id}.')
 
         if new_id != old_id:
             self._send_packet(old_id, _SERVO_ID_WRITE, bytes((new_id,)))
 
-    def angle_offset_adjust(self, servo_id: int, offset_degrees: Real, write: bool = True) -> None:
+    def angle_offset_adjust(self, servo_id: int, offset_degrees: Real,
+                            write: bool = True) -> None:
         """
         Sets the servo's angle offset.
 
         :param servo_id:
-        :param offset_degrees: Servo angle offset, in the range [-30, +30] degrees.
-        :param write: If True, then angle_offset_write(servo_id) will be called after the offset adjustment
-            has been made. Otherwise, the offset adjustment will be lost after the servo loses power.
+        :param offset_degrees: Servo angle offset, in the range [-30, +30]
+            degrees.
+        :param write: If True, then angle_offset_write(servo_id) will be called
+            after the offset adjustment has been made. Otherwise, the offset
+            adjustment will be lost after the servo loses power.
         """
 
         if offset_degrees < -30 or offset_degrees > 30:
-            raise ValueError(f'offset_degrees must be in range [-30, 30]; got {offset_degrees}.')
+            raise ValueError(
+                f'offset_degrees must be in range [-30, 30]; '
+                f'got {offset_degrees}.')
 
         offset = int(round(offset_degrees * 125 / 30))
         params = _1_SIGNED_CHAR_STRUCT.pack(offset)
@@ -500,23 +567,28 @@ class ServoBus:
 
     def angle_offset_read(self, servo_id: int) -> float:
         """
-        :return: The angle offset of the servo in degrees. Defaults to 0. Range is [-30, 30].
+        :return: The angle offset of the servo in degrees. Defaults to 0.
+            Range is [-30, 30].
         """
 
-        response = self._send_and_receive_packet(servo_id, _SERVO_ANGLE_OFFSET_READ)
+        response = self._send_and_receive_packet(servo_id,
+                                                 _SERVO_ANGLE_OFFSET_READ)
         offset = _1_SIGNED_CHAR_STRUCT.unpack(response.parameters)[0]
         return offset * 30 / 125
 
-    def angle_limit_write(self, servo_id: int, min_angle_degrees: Real, max_angle_degrees: Real) -> None:
+    def angle_limit_write(self, servo_id: int, min_angle_degrees: Real,
+                          max_angle_degrees: Real) -> None:
         """
         Sets the minimum and maximum servo angles allowed.
         This setting will persist after the servo loses power.
 
         :param servo_id:
-        :param min_angle_degrees: Minimum servo angle, in the range [0, 240] degrees. Will be truncated if out of range.
-            Must be lower than max_angle_degrees.
-        :param max_angle_degrees: Maximum servo angle, in the range [0, 240] degrees. Will be truncated if out of range.
-            Must be higher than min_angle_degrees.
+        :param min_angle_degrees: Minimum servo angle, in the range [0, 240]
+            degrees. Will be truncated if out of range. Must be lower than
+            max_angle_degrees.
+        :param max_angle_degrees: Maximum servo angle, in the range [0, 240]
+            degrees. Will be truncated if out of range. Must be higher than
+            min_angle_degrees.
         """
 
         min_angle_degrees = truncate_angle(min_angle_degrees)
@@ -528,9 +600,10 @@ class ServoBus:
         if min_angle >= max_angle:
             raise ValueError(
                 f'min_angle_degrees must be less than max_angle_degrees; '
-                f'got min_angle_degrees={min_angle_degrees} (==> min_angle={min_angle}) '
-                f'and max_angle_degrees={max_angle_degrees} (==> max_angle={max_angle}).'
-            )
+                f'got min_angle_degrees={min_angle_degrees} '
+                f'(==> min_angle={min_angle}) '
+                f'and max_angle_degrees={max_angle_degrees} '
+                f'(==> max_angle={max_angle}).')
 
         params = _2_UNSIGNED_SHORTS_STRUCT.pack(min_angle, max_angle)
         self._send_packet(servo_id, _SERVO_ANGLE_LIMIT_WRITE, params)
@@ -539,29 +612,34 @@ class ServoBus:
         """
         Gets the angle limits as set by angle_limit_write().
 
-        :return: The angle limits as a tuple of (min_angle_degrees, max_angle_degrees).
+        :return: The angle limits as a tuple of
+            (min_angle_degrees, max_angle_degrees).
         """
 
-        response = self._send_and_receive_packet(servo_id, _SERVO_ANGLE_LIMIT_READ)
+        response = self._send_and_receive_packet(servo_id,
+                                                 _SERVO_ANGLE_LIMIT_READ)
 
-        min_angle, max_angle = _2_UNSIGNED_SHORTS_STRUCT.unpack(response.parameters)
+        min_angle, max_angle = _2_UNSIGNED_SHORTS_STRUCT.unpack(
+            response.parameters)
 
         min_angle_degrees = _ticks_to_degrees(min_angle)
         max_angle_degrees = _ticks_to_degrees(max_angle)
 
         return min_angle_degrees, max_angle_degrees
 
-    def vin_limit_write(self, servo_id: int, min_voltage: Real, max_voltage: Real) -> None:
+    def vin_limit_write(self, servo_id: int, min_voltage: Real,
+                        max_voltage: Real) -> None:
         """
-        Sets the minimum and maximum supply voltages allowed to power the servo.
-        If the supply voltage goes outside the specified range, the servos will be powered off.
-        This setting will persist after a servo loses power.
+        Sets the minimum and maximum supply voltages allowed to power the
+        servo. If the supply voltage goes outside the specified range,
+        the servos will be powered off. This setting will persist after a
+        servo loses power.
 
         :param servo_id:
-        :param min_voltage: Should be in the range [4.5, 12] volts; anything out of range will be truncated.
-            This should be lower than max_voltage.
-        :param max_voltage: Should be in the range [4.5, 12] volts; anything out of range will be truncated.
-            This should be higher than min_voltage.
+        :param min_voltage: Should be in the range [4.5, 12] volts; anything out
+            of range will be truncated. This should be lower than max_voltage.
+        :param max_voltage: Should be in the range [4.5, 12] volts; anything out
+            of range will be truncated. This should be higher than min_voltage.
         """
 
         def scrub_voltage(v: Real) -> int:
@@ -575,9 +653,10 @@ class ServoBus:
         if min_voltage_mv > max_voltage_mv:
             raise ValueError(
                 f'min_voltage must be less than max_voltage; '
-                f'got min_voltage={min_voltage} (==> min_voltage_mv={min_voltage_mv}) '
-                f'and max_voltage={max_voltage} (==> max_voltage_mv={max_voltage_mv}).'
-            )
+                f'got min_voltage={min_voltage} '
+                f'(==> min_voltage_mv={min_voltage_mv}) '
+                f'and max_voltage={max_voltage} '
+                f'(==> max_voltage_mv={max_voltage_mv}).')
 
         params = _2_UNSIGNED_SHORTS_STRUCT.pack(min_voltage_mv, max_voltage_mv)
         self._send_packet(servo_id, _SERVO_VIN_LIMIT_WRITE, params)
@@ -590,23 +669,27 @@ class ServoBus:
         :return: A tuple of the (min_voltage, max_voltage) settings in Volts.
         """
 
-        response = self._send_and_receive_packet(servo_id, _SERVO_VIN_LIMIT_READ)
+        response = self._send_and_receive_packet(servo_id,
+                                                 _SERVO_VIN_LIMIT_READ)
 
-        min_voltage_mv, max_voltage_mv = _2_UNSIGNED_SHORTS_STRUCT.unpack(response.parameters)
+        min_voltage_mv, max_voltage_mv = _2_UNSIGNED_SHORTS_STRUCT.unpack(
+            response.parameters)
         min_voltage = min_voltage_mv / 1000
         max_voltage = max_voltage_mv / 1000
 
         return min_voltage, max_voltage
 
-    def temp_max_limit_write(self, servo_id: int, temp: Real, units: Literal['C', 'F'] = 'F') -> None:
+    def temp_max_limit_write(self, servo_id: int, temp: Real,
+                             units: Literal['C', 'F'] = 'F') -> None:
         """
         Sets the maximum allowed temperature at which the servo will operate.
-        If the servo temperature exceeds this limit, then the motor will be powered off.
-        This setting persists after a servo loses power.
+        If the servo temperature exceeds this limit, then the motor will be
+        powered off. This setting persists after a servo loses power.
 
         :param servo_id:
-        :param temp: Max allowed temperature. Should be in range [50, 100] C or [122, 212] F.
-            Will be truncated if out of range. Default is 85 C or 185 F.
+        :param temp: Max allowed temperature. Should be in range [50, 100] C or
+            [122, 212] F. Will be truncated if out of range. Default is 85 C or
+            185 F.
         :param units: Use 'C' for Celsius or 'F' for Fahrenheit.
         """
 
@@ -620,7 +703,8 @@ class ServoBus:
 
         self._send_packet(servo_id, _SERVO_TEMP_MAX_LIMIT_WRITE, bytes((temp,)))
 
-    def temp_max_limit_read(self, servo_id: int, units: Literal['C', 'F'] = 'F') -> float:
+    def temp_max_limit_read(self, servo_id: int,
+                            units: Literal['C', 'F'] = 'F') -> float:
         """
         Gets the maximum temperature limit s set by temp_max_limit_write().
 
@@ -631,7 +715,8 @@ class ServoBus:
 
         units = _validate_temp_units(units)
 
-        response = self._send_and_receive_packet(servo_id, _SERVO_TEMP_MAX_LIMIT_READ)
+        response = self._send_and_receive_packet(servo_id,
+                                                 _SERVO_TEMP_MAX_LIMIT_READ)
 
         temp = float(response.parameters[0])
         if units == 'F':
@@ -641,7 +726,8 @@ class ServoBus:
 
     def temp_read(self, servo_id: int, units: Literal['C', 'F'] = 'F') -> float:
         """
-        Reads the temperature of the servo and returns in units of either Celsius or Fahrenheit.
+        Reads the temperature of the servo and returns in units of either
+        Celsius or Fahrenheit.
 
         :param servo_id:
         :param units: Use 'C' for Celsius or 'F' for Fahrenheit.
@@ -678,18 +764,23 @@ class ServoBus:
 
         return _ticks_to_degrees(angle)
 
-    def mode_write(self, servo_id: int, mode: Literal['motor', 'servo'], speed: Real = None) -> None:
+    def mode_write(self, servo_id: int, mode: Literal['motor', 'servo'],
+                   speed: Real = None) -> None:
         """
-        Sets the servo mode to either 'motor' -- where it rotates continuously at a certain speed --
-        or 'servo' -- where it holds to a specific position.
+        Sets the servo mode to either 'motor' -- where it rotates
+        continuously at a certain speed -- or 'servo' -- where it holds to a
+        specific position.
 
         :param servo_id:
-        :param mode: Either 'motor' or 'servo'. If 'motor', then speed must be specified.
-        :param speed: In the range [-1000, 1000]. Will be truncated if out of range. Ignored if mode is 'servo'.
+        :param mode: Either 'motor' or 'servo'. If 'motor', then speed must be
+            specified.
+        :param speed: In the range [-1000, 1000]. Will be truncated if out of
+            range. Ignored if mode is 'servo'.
         """
 
         if mode.lower() not in {'motor', 'servo'}:
-            raise ValueError(f'mode must be either "motor" or "servo"; got "{mode}".')
+            raise ValueError(
+                f'mode must be either "motor" or "servo"; got "{mode}".')
 
         mode = mode.lower()
         if mode == 'motor':
@@ -701,20 +792,24 @@ class ServoBus:
         else:
             speed = 0
 
-        params = _1_UNSIGNED_CHAR_1_UNSIGNED_SHORT_STRUCT.pack(1 if mode == 'motor' else 0, speed)
+        params = _1_UNSIGNED_CHAR_1_UNSIGNED_SHORT_STRUCT.pack(
+            1 if mode == 'motor' else 0, speed)
         self._send_packet(servo_id, _SERVO_OR_MOTOR_MODE_WRITE, params)
 
     def mode_read(self, servo_id: int) -> Tuple[str, Optional[int]]:
         """
-        Gets the mode the servo is currently set to, based on the last call to mode_write().
+        Gets the mode the servo is currently set to, based on the last call
+        to mode_write().
 
         :param servo_id:
         :return: A tuple of ('motor' or 'servo', speed or None).
         """
 
-        response = self._send_and_receive_packet(servo_id, _SERVO_OR_MOTOR_MODE_READ)
+        response = self._send_and_receive_packet(servo_id,
+                                                 _SERVO_OR_MOTOR_MODE_READ)
 
-        mode, speed = _1_UNSIGNED_CHAR_1_UNSIGNED_SHORT_STRUCT.unpack(response.parameters)
+        mode, speed = _1_UNSIGNED_CHAR_1_UNSIGNED_SHORT_STRUCT.unpack(
+            response.parameters)
 
         if mode == 0:
             mode = 'servo'
@@ -728,17 +823,27 @@ class ServoBus:
         return mode, speed
 
     def set_powered(self, servo_id: int, powered: bool) -> None:
-        """Sets whether or not the servo is powered and attempting to hold its position."""
+        """
+        Sets whether or not the servo is powered and attempting to hold its
+        position.
+        """
 
-        self._send_packet(servo_id, _SERVO_LOAD_OR_UNLOAD_WRITE, b'\x01' if powered else b'\x00')
+        self._send_packet(servo_id, _SERVO_LOAD_OR_UNLOAD_WRITE,
+                          b'\x01' if powered else b'\x00')
 
     def is_powered(self, servo_id: int) -> bool:
-        """Gets whether or not the servo is powered and attempting to hold its position."""
+        """
+        Gets whether or not the servo is powered and attempting to hold its
+        position.
+        """
 
         if servo_id < MIN_ID or servo_id > MAX_ID:
-            raise ValueError(f'servo_id must be in range [{MIN_ID}, {MAX_ID}]; got {servo_id}.')
+            raise ValueError(
+                f'servo_id must be in range [{MIN_ID}, {MAX_ID}]; '
+                f'got {servo_id}.')
 
-        response = self._send_and_receive_packet(servo_id, _SERVO_LOAD_OR_UNLOAD_READ)
+        response = self._send_and_receive_packet(servo_id,
+                                                 _SERVO_LOAD_OR_UNLOAD_READ)
         return bool(response.parameters[0])
 
     def led_ctrl_write(self, servo_id: int, state: bool) -> None:
@@ -746,10 +851,12 @@ class ServoBus:
         Sets whether or not the LED should be on when there are no errors.
 
         :param servo_id:
-        :param state: Whether or not the LED should be on when there are no errors.
+        :param state: Whether or not the LED should be on when there are no
+            errors.
         """
 
-        self._send_packet(servo_id, _SERVO_LED_CTRL_WRITE, b'\x00' if state else b'\x01')
+        self._send_packet(servo_id, _SERVO_LED_CTRL_WRITE,
+                          b'\x00' if state else b'\x01')
 
     def led_ctrl_read(self, servo_id: int) -> bool:
         """
@@ -762,9 +869,11 @@ class ServoBus:
         response = self._send_and_receive_packet(servo_id, _SERVO_LED_CTRL_READ)
         return response.parameters == b'\x00'
 
-    def led_error_write(self, servo_id: int, stalled: bool, over_voltage: bool, over_temp: bool) -> None:
+    def led_error_write(self, servo_id: int, stalled: bool, over_voltage: bool,
+                        over_temp: bool) -> None:
         """
-        Sets which error conditions will cause the LED to indicate an error has occurred.
+        Sets which error conditions will cause the LED to indicate an error has
+        occurred.
 
         :param servo_id:
         :param stalled:
@@ -778,10 +887,11 @@ class ServoBus:
 
     def led_error_read(self, servo_id: int) -> Tuple[bool, bool, bool]:
         """
-        Returns which error conditions will cause the LED to indicate an error has occurred.
+        Returns which error conditions will cause the LED to indicate an error
+        has occurred.
 
-        Note: This is NOT the error condition that the servo is currently experiencing.
-        There appears to be no way to get that information.
+        Note: This is NOT the error condition that the servo is currently
+        experiencing. There appears to be no way to get that information.
 
         :param servo_id:
         :return: A tuple of booleans (stalled, over_voltage, over_temp).
@@ -807,7 +917,8 @@ def truncate_angle(angle_degrees: Real) -> Real:
     return min(max(MIN_ANGLE_DEGREES, angle_degrees), MAX_ANGLE_DEGREES)
 
 
-def _calculate_checksum(servo_id: int, length: int, command: int, parameters: Union[bytearray, bytes]) -> int:
+def _calculate_checksum(servo_id: int, length: int, command: int,
+                        parameters: Union[bytearray, bytes]) -> int:
     checksum = servo_id + length + command + sum(parameters)
     checksum = ~checksum & 0xFF
     return checksum
