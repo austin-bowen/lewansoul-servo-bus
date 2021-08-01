@@ -174,7 +174,6 @@ class ServoBus:
     """
     Controls bus servos using the LewanSoul Bus Servo Communication Protocol.
 
-    # TODO: Update this
     Example usage::
 
         # Create a new ServoBus instance using a "with ..." statement,
@@ -252,7 +251,11 @@ class ServoBus:
         finally:
             if self._close_on_exit:
                 with self._serial_conn_lock:
-                    self._serial_conn.close()
+                    self.serial_conn.close()
+
+    @property
+    def serial_conn(self):
+        return self._serial_conn
 
     def _send_packet(self, servo_id: int, command: int,
                      parameters: Union[bytearray, bytes] = None) -> None:
@@ -289,40 +292,38 @@ class ServoBus:
         checksum = _calculate_checksum(servo_id, length, command, parameters)
         servo_packet.append(checksum)
 
-        # Insert the total length of the packet at the beginning of the packet
-        servo_packet.insert(0, len(servo_packet))
         with self._serial_conn_lock:
             # Clear the input buffer
             try:
-                self._serial_conn.reset_input_buffer()
+                self.serial_conn.reset_input_buffer()
             except AttributeError:
                 pass
 
             # Send the packet
-            self._serial_conn.write(servo_packet)
+            self.serial_conn.write(servo_packet)
 
             # Discard echoed bytes
             if self.discard_echo:
-                self._serial_conn.read(len(servo_packet))
+                self.serial_conn.read(len(servo_packet))
 
     def _receive_packet(self) -> _ServoPacket:
         with self._serial_conn_lock:
-            header = self._serial_conn.read(2)
+            header = self.serial_conn.read(2)
             if header != _PACKET_HEADER:
-                raise ServoBusException(
+                raise ServoBusError(
                     f'Expected header {repr(_PACKET_HEADER)}; '
                     f'received header {repr(header)}.')
 
-            servo_id, length, command = self._serial_conn.read(3)
+            servo_id, length, command = self.serial_conn.read(3)
             param_count = length - 3
-            parameters = self._serial_conn.read(param_count)
-            checksum = self._serial_conn.read(1)[0]
+            parameters = self.serial_conn.read(param_count)
+            checksum = self.serial_conn.read(1)[0]
 
         if self.verify_checksum:
             actual_checksum = _calculate_checksum(servo_id, length, command,
                                                   parameters)
             if checksum != actual_checksum:
-                raise ServoBusException(
+                raise ServoBusError(
                     f'Checksum failed for received packet! '
                     f'Received checksum = {checksum}. '
                     f'Actual checksum = {actual_checksum}.'
@@ -341,19 +342,22 @@ class ServoBus:
 
         # Make sure received packet servo ID matches
         if response.servo_id != servo_id:
-            raise ServoBusException(
+            raise ServoBusError(
                 f'Received packet servo ID ({response.servo_id}) does not '
                 f'match sent packet servo ID ({servo_id}).'
             )
 
         # Make sure received packet command matches
         if response.command != command:
-            raise ServoBusException(
+            raise ServoBusError(
                 f'Received packet command ({response.command}) does not '
                 f'match sent packet command ({command}).'
             )
 
         return response
+
+    def get_servo(self, servo_id: int, name: str = None) -> Servo:
+        return Servo(servo_id, self, name=name)
 
     def _move_time_write(self, servo_id: int, angle_degrees: Real, time_s: Real,
                          command: int, wait: bool) -> None:
@@ -386,9 +390,6 @@ class ServoBus:
 
         if wait:
             time.sleep(time_s)
-
-    def get_servo(self, servo_id: int, name: str = None) -> Servo:
-        return Servo(servo_id, self, name=name)
 
     def move_time_write(self, servo_id: int, angle_degrees: Real, time_s: Real,
                         wait: bool = False) -> None:
@@ -467,8 +468,8 @@ class ServoBus:
         :return: A tuple of (angle_degrees, time_s).
         """
 
-        return self._move_time_read(servo_id,
-                                    command=_SERVO_MOVE_TIME_WAIT_READ)
+        return self._move_time_read(
+            servo_id, command=_SERVO_MOVE_TIME_WAIT_READ)
 
     def move_speed_write(self, servo_id: int, angle_degrees: Real,
                          speed_dps: Real, wait: bool = False) -> None:
@@ -917,7 +918,7 @@ class ServoBus:
         return stalled, over_voltage, over_temp
 
 
-class ServoBusException(Exception):
+class ServoBusError(Exception):
     pass
 
 
